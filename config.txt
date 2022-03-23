@@ -1,0 +1,17 @@
+2021-07-05-11:22:13
+
+data_dir: ./data
+dataset: cifar10
+lr: 0.01
+lr_decay_step: 5,10
+resume: /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt
+resume_mask: None
+gpu: 0
+job_dir: /Lun2/great99/HRank-master/
+epochs: 15
+train_batch_size: 128
+eval_batch_size: 100
+start_cov: 0
+compress_rate: [0.0]*3+[0.2]+[0.6]+[0.8]*2+[0.9]+[0.95]*5
+arch: vgg_16_bn
+
