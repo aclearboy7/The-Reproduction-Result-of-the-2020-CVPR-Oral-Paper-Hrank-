@@ -1,0 +1,204 @@
+#VGG16bn获得Flops和Parameters
+python cal_flops_params.py --arch vgg_16_bn --compress_rate [0.95]+[0.5]*6+[0.9]*4+[0.8]*2
+#然后测试top1和top5准确率
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master/ --arch vgg_16_bn
+
+#测试revaluate.py时你首先要改一下util里面把哪两行来着view改成reshape
+
+#GOOGLENET获得Flops和Parameters
+python cal_flops_params.py --arch googlenet --compress_rate [0.10]+[0.8]*5+[0.85]+[0.8]*3
+#然后测试top1和top5准确率
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master/pretrained_model/googlenet.pt --arch googlenet
+
+
+#densenet获得Flops和Parameters
+python cal_flops_params.py --arch densenet_40 --compress_rate [0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*5+[0.0]
+#然后测试top1和top5准确率
+
+AI：为什么会出现这种现象，就是vgg16_bn的剪枝率为[0.95]+[0.5]*6+[0.9]*4+[0.8]*2时，论文中的结果是Params=2.64M(82.1%)，Flops=108.61M(65.3%)
+而复现的剪枝率同样设定为这个，得到的params=4.81M,Flops=116.63M, 大不一样
+而且我也不明白为什么论文中  FLOPs(PR)    Parameters(PR)
+                        73.70M(76.5%) 1.78M(92.0%)
+                       145.61M(53.5%) 2.51M(82.9%)
+                       108.61M(65.3%) 2.64M(82.1%)
+    mine               116.63M(62.8%) 4.81M(67.9%)
+
+#发现了原因：是因为结果的最后一个conv层的剪枝率不是我设置的，我设得是0.8，但是运行的时候是0.0！直接修改就OK了！在cal_flops_params.py第51行
+if args.arch=='vgg_16_bn':
+    compress_rate[12]=0.8
+
+#生成秩的程序
+#vgg16生成秩
+python rank_generation.py --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt.pt --arch vgg_16_bn --limit 128
+
+#得到resnet50的Flops和Parameters
+python cal_flops_params.py --arch resnet_50 --compress_rate [0.2]+[0.8]*10+[0.8]*13+[0.55]*19+[0.45]*10
+#resnet_50的训练
+python main.py --dataset imagenet --data_dir /Lun2/great99/HRank-master/data --resume /Lun2/great99/HRank-master/pretrained_model/resnet50-Imagenet.pth --arch resnet_50 --compress_rate [0.2]+[0.8]*10+[0.8]*13+[0.55]*19+[0.45]*10
+
+
+#vgg_16_bn的训练
+python main.py  --job_dir /Lun2/great99/HRank-master/ --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.95]+[0.5]*6+[0.9]*4+[0.8]*2
+python main.py  --job_dir /Lun2/great99/HRank-master/ --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.95]+[0.5]*6+[0.95]*6
+ b
+--resume /Lun2/great99/HRank-master/pruned_checkpoint/
+--job_dir /Lun2/great99/HRank-master/
+
+#把第六台的Imagenet传到第一台：/在两个远程主机之间复制文件
+scp zhangxiaomei@10.0.0.6:/home/zhangxiaomei/pytorch_quantization-master/ILSVRC2012_dataset/ILSVRC2012_bbox_val_v3.tgz /Lun2/great99/HRank-master/data/ILSVRC2012/
+scp zhangxiaomei@10.0.0.6:/home/zhangxiaomei/pytorch_quantization-master/ILSVRC2012_dataset/ILSVRC2012_img_train.tar /Lun2/great99/HRank-master/data/ILSVRC2012/
+scp zhangxiaomei@10.0.0.6:/home/zhangxiaomei/pytorch_quantization-master/ILSVRC2012_dataset/ILSVRC2012_img_test_v10102019.tar /Lun2/great99/HRank-master/data/ILSVRC2012/
+scp zhangxiaomei@10.0.0.6:/home/zhangxiaomei/pytorch_quantization-master/ILSVRC2012_dataset/ILSVRC2012_img_val.tar /Lun2/great99/HRank-master/data/ILSVRC2012/
+
+#6月25日重回，
+对vgg16_bn先生成秩，再main.py训练，再测参数量，再测精度
+python rank_generation.py --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --arch vgg_16_bn --limit 128 (秩只要生成一次！！！)
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/vgg_16_bn --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.95]+[0.5]*6+[0.95]*6
+python cal_flops_params.py --arch vgg_16_bn --compress_rate [0.95]+[0.5]*6+[0.95]*6
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master/rank_conv/vgg_16_bn --arch vgg_16_bn
+
+
+#思考vgg16_bn的训练和生成秩有什么关系，为什么在生成秩的文件里面会有compress rate=cprate? 与训练中的main.py中的compress rate 赋值不一样会不会有冲突？
+
+#顺序应该是先先生成秩，再main.py训练，再测参数量，再测精度
+#resnet56生成秩
+python rank_generation.py --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --arch resnet_56 --limit 128
+#main.py训练resnet_56
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --job_dir
+ /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.1]+[0.60]*35+[0.0]*2+[0.6]*6+[0.4]*3+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]
+#对resnet_56测Flops和Parameters
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.1]+[0.60]*35+[0.0]*2+[0.6]*6+[0.4]*3+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]+[0.4]
+#然后测试top1和top5准确率
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+
+
+换个剪枝率试试
+[0.1]+[0.60]*35+[0.0]*2+[0.6]*17
+python rank_generation.py --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --arch resnet_56 --limit 128
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.1]+[0.60]*35+[0.0]*2+[0.6]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+
+#再换一个
+#不用生成秩了，秩只需要生成一次
+#所以只有main.py,evaluate.py,cal_flops_params.py
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.1]+[0.60]*35+[0.2]+[0.6]+[0.8]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.1]+[0.60]*35+[0.2]+[0.6]+[0.8]*17
+
+
+#resnet_56最好的剪枝效果：[0.0]+[0.0]*18+[0.1]+[0.4]*17+[0.7]+[0.85]*17或者[0.0]+[0.0]*19+[0.4]*17+[0.7]+[0.85]*17
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.0]+[0.0]*19+[0.4]*17+[0.7]+[0.85]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*19+[0.4]*17+[0.7]+[0.85]*17
+
+#resnet_56最好的剪枝效果：[0.0]+[0.0]*18+[0.5]+[0.75]*17+[0.88]+[0.95]*17，一般resnet_56训8个半小时就行
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.5]+[0.75]*17+[0.88]+[0.95]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.5]+[0.75]*17+[0.88]+[0.95]*17
+
+
+#resnet_110
+python rank_generation.py --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --arch resnet_110 --limit 128
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --dataset cifar10  --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.45]*36+[0.5]+[0.6]*35
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --arch resnet_110
+python cal_flops_params.py --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.45]*36+[0.5]+[0.6]*35
+
+
+#换个剪枝率再试
+python cal_flops_params.py --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --dataset cifar10  --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --arch resnet_110
+
+
+#对vgg16_bn换个剪枝率试试：[0.0]*3+[0.2]+[0.6]+[0.8]*2+[0.9]+[0.95]*5
+python main.py  --job_dir /Lun2/great99/HRank-master/ --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.0]*3+[0.2]+[0.6]+[0.8]*2+[0.9]+[0.95]*5
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master/rank_conv/vgg_16_bn --arch vgg_16_bn
+python cal_flops_params.py --arch vgg_16_bn --compress_rate [0.0]*3+[0.2]+[0.6]+[0.8]*2+[0.9]+[0.95]*5
+
+#最后记录一下：
+#tmux a -t vgg16_rank_generation
+python main.py  --job_dir /Lun2/great99/HRank-master/ --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.0]*3+[0.2]+[0.6]+[0.8]*2+[0.9]+[0.95]*5
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master/rank_conv/vgg_16_bn --arch vgg_16_bn
+
+#tmux a -t resnet56_rank_generation
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.5]+[0.75]*17+[0.88]+[0.95]*17
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.5]+[0.75]*17+[0.88]+[0.95]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+
+#tmux a -t resnet110_new
+python cal_flops_params.py --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --dataset cifar10  --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --arch resnet_110
+
+
+9月4日：
+以其他层尽量靠近最大层的方法/思路去做实验：
+#tmux a -t vgg16
+python main.py  --job_dir /Lun2/great99/HRank-master/ --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.0]*3+[0.0]+[0.36]+[0.68]*2+[0.84]+[0.92]*5
+python cal_flops_params.py --arch vgg_16_bn --compress_rate [0.0]*3+[0.0]+[0.36]+[0.68]*2+[0.84]+[0.92]*5
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master --arch vgg_16_bn                             最大层参数：189092    精度93.22  /99.77
+  
+
+
+#tmux a -t resnet56
+最大层：7488
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.0]+[0.20]*16+[0.2]+[0.6]+[0.8]*17
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.0]+[0.20]*16+[0.2]+[0.6]+[0.8]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+
+最大层：6336
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.0]+[0.0]*19+[0.33]*17+[0.66]+[0.83]*17
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*19+[0.33]*17+[0.66]+[0.83]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+
+最大层：10368
+python main.py  --job_dir /Lun2/great99/HRank-master/new/resnet56_10368 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.1]+[0.60]*35+[0.0]*2+[0.6]*17
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.0]+[0.00]*17+[0.44]+[0.73]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_56_limit128 --arch resnet_56
+
+
+最大层：9216
+python main.py  --job_dir /Lun2/great99/HRank-master/new/resnet56_9216 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_56.pt.pt --dataset cifar10  --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.0]+[0.00]*17+[0.5]+[0.75]*17
+python cal_flops_params.py --arch resnet_56 --compress_rate [0.0]+[0.0]*18+[0.0]+[0.00]*17+[0.5]+[0.75]*17
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/new/resnet56_9216 --arch resnet_56
+
+#tmux a -t resnet110
+python cal_flops_params.py --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35            旧的，忘记记精度了
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --dataset cifar10  --arch resnet_110 --compress_rate [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35       
+与下面对比
+python cal_flops_params.py --arch resnet_110 --compress_rate [0.0]+[0.00]*36+[0.4]*36+[0.7]+[0.85]*35            新的
+python main.py  --job_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --dataset cifar10  --arch resnet_110 --compress_rate [0.0]+[0.00]*36+[0.4]*36+[0.7]+[0.85]*35
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128 --arch resnet_110
+
+
+python cal_flops_params.py --arch resnet_110 --compress_rate [0.0]+[0.00]*36+[0.00]*35+[0.0]+[0.39]+[0.7]*35
+python main.py  --job_dir /Lun2/great99/HRank-master/new/resnet110_11520 --resume /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt --dataset cifar10  --arch resnet_110 --compress_rate [0.0]+[0.00]*36+[0.00]*35+[0.0]+[0.39]+[0.7]*35
+python evaluate.py --dataset cifar10 --data_dir /Lun2/great99/HRank-master/data --test_model_dir /Lun2/great99/HRank-master/new/resnet110_11520  --arch resnet_110
+
+#tmux a -t  googlenet
+python cal_flops_params.py --arch googlenet --compress_rate [0.10]+[0.8]*5+[0.85]+[0.8]*3
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master --arch googlenet
+
+#tmux a -t  densenet_40           这是先复现，47952
+python cal_flops_params.py --arch densenet_40 --compress_rate [0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*5+[0.0]
+python main.py  --job_dir /Lun2/great99/HRank-master/new/densenet --resume  /Lun2/great99/HRank-master/pretrained_model/densenet_40.pt --dataset cifar10  --arch densenet_40 --compress_rate [0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*5+[0.0]
+python evaluate_densenet_40.py --dataset cifar10  --data_dir /Lun2/great99/HRank-master/data  --test_model_dir /Lun2/great99/HRank-master/new/densenet --arch densenet_40
+
+#tmux a -t  densenet_40_           这是先复现，29808
+python cal_flops_params.py --arch densenet_40 --compress_rate [0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*3+[0.0]+[0.7]*2+[0.7]+[0.2]*2+[0.25]+[0.35]*3+[0.7]*5+[0.45]
+python main.py  --job_dir /Lun2/great99/HRank-master/new/densenet_29808_0.568M --resume  /Lun2/great99/HRank-master/pretrained_model/densenet_40.pt --dataset cifar10  --arch densenet_40 --compress_rate [0.0]+[0.1]*6+[0.7]*6+[0.0]+[0.1]*6+[0.7]*3+[0.0]+[0.7]*2+[0.7]+[0.2]*2+[0.25]+[0.35]*3+[0.7]*5+[0.45]
+python evaluate_densenet_40.py --dataset cifar10  --data_dir /Lun2/great99/HRank-master/data  --test_model_dir /Lun2/great99/HRank-master/new/densenet_29808_0.568M --arch densenet_40
+
+#tmux a -t  densenet_40_           这是先复现，30240
+python cal_flops_params.py --arch densenet_40 --compress_rate [0.00]*23+[0.0]+[0.16]*2+[0.69]+[0.18]*2+[0.22]+[0.31]*3+[0.34]+[0.34]+[0.40]*2+[0.42]*2
+python main.py  --job_dir /Lun2/great99/HRank-master/new/densenet_30240_0.824M --resume  /Lun2/great99/HRank-master/pretrained_model/densenet_40.pt --dataset cifar10  --arch densenet_40 --compress_rate [0.00]*23+[0.0]+[0.16]*2+[0.69]+[0.18]*2+[0.22]+[0.31]*3+[0.34]+[0.34]+[0.40]*2+[0.42]*2
+python evaluate_densenet_40.py --dataset cifar10  --data_dir /Lun2/great99/HRank-master/data  --test_model_dir /Lun2/great99/HRank-master/new/densenet_30240_0.824M --arch densenet_40
+
+
+对上imagenet
+python rank_generation.py --resume /Lun2/great99/HRank-master/pretrained_model/resnet50-Imagenet.pt --arch resnet_50 --limit 128
+python main.py  --job_dir /Lun2/great99/HRank-master/new/vgg16_imagenet_1 --resume  --dataset Imagenet-12 --data_dir /Lun2/great99/HRank-master/date_new --arch vgg_16_bn --compress_rate [0.0]*3+[0.2]+[0.6]+[0.8]*2+[0.9]+[0.95]*5 
+
+
+python main.py  --gpu 0 --job_dir /Lun2/great99/HRank-master/rank_conv/vgg_16_bn_limit168 --resume /Lun2/great99/HRank-master/pretrained_model/vgg_16_bn.pt --dataset cifar10  --arch vgg_16_bn --compress_rate [0.95]+[0.5]*6+[0.95]*6
+python evaluate.py --dataset cifar10  --test_model_dir /Lun2/great99/HRank-master/rank_conv/vgg_16_bn_limit168 --arch vgg_16_bn
