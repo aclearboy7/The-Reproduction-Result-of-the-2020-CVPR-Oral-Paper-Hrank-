@@ -1,0 +1,17 @@
+2021-07-05-11:37:24
+
+data_dir: ./data
+dataset: cifar10
+lr: 0.01
+lr_decay_step: 5,10
+resume: /Lun2/great99/HRank-master/pretrained_model/resnet_110.pt
+resume_mask: None
+gpu: 0
+job_dir: /Lun2/great99/HRank-master/rank_conv/resnet_110_limit128
+epochs: 15
+train_batch_size: 128
+eval_batch_size: 100
+start_cov: 0
+compress_rate: [0.1]+[0.40]*36+[0.4]*36+[0.7]+[0.85]*35
+arch: resnet_110
+
