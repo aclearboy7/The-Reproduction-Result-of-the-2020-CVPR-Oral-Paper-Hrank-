@@ -1,0 +1,2 @@
+# The-Reproduction-Result-of-the-2020-CVPR-Oral-Paper-Hrank-
+This is the reproduction result of the 2020 CVPR oral paper——《Hrank》, I tested a lot of medium pruning rate, and found that the difference in pruning rate affects the final performance, this degree of freedom depends on the larger the solution space of pruning, the more difficult it is to capture the optimal pruning structure.  这是2020CVPR oral 论文Hrank的复现结果，本人测试了很多中剪枝率，发现对于剪枝率的不同很影响最终性能，这个自由度取决于剪枝的解空间解空间越大，对于最佳剪枝结构越难以捕捉。
